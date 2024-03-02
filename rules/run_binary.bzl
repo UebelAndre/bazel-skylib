@@ -21,7 +21,7 @@ Runs a binary as a build action. This rule does not require Bash (unlike native.
 load("//lib:dicts.bzl", "dicts")
 
 def _impl(ctx):
-    tool_as_list = [ctx.attr.tool]
+    data = [ctx.attr.tool] + ctx.attr.srcs + ctx.attr.tools
     args = [
         # Expand $(location) / $(locations) in args.
         #
@@ -33,18 +33,18 @@ def _impl(ctx):
         # tokenization they would have to write args=["'a b'"] or args=["a\\ b"]. There's no
         # documented tokenization function anyway (as of 2019-05-21 ctx.tokenize exists but is
         # undocumented, see https://github.com/bazelbuild/bazel/issues/8389).
-        ctx.expand_location(a, tool_as_list) if "$(location" in a else a
+        ctx.expand_location(a, data) if "$(location" in a else a
         for a in ctx.attr.args
     ]
     envs = {
         # Expand $(location) / $(locations) in the values.
-        k: ctx.expand_location(v, tool_as_list) if "$(location" in v else v
+        k: ctx.expand_location(v, data) if "$(location" in v else v
         for k, v in ctx.attr.env.items()
     }
     ctx.actions.run(
         outputs = ctx.outputs.outs,
         inputs = ctx.files.srcs,
-        tools = [ctx.executable.tool],
+        tools = [ctx.executable.tool] + ctx.files.tools,
         executable = ctx.executable.tool,
         arguments = args,
         mnemonic = "RunBinary",
@@ -71,6 +71,12 @@ run_binary = rule(
             allow_files = True,
             mandatory = True,
             cfg = "exec",
+        ),
+        "tools": attr.label_list(
+            allow_files = True,
+            cfg = "exec",
+            doc = "Additional tools of the action.\n\nThese labels are available for" +
+                  " `$(location)` expansion in `args` and `env`.",
         ),
         "env": attr.string_dict(
             doc = "Environment variables of the action.\n\nSubject to " +
